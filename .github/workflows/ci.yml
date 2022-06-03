@@ -5,7 +5,7 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [master, WIP]
   pull_request:
     branches: [master]
   schedule:
@@ -37,8 +37,6 @@ jobs:
 
       - name: Build zenoh-python
         uses: messense/maturin-action@v1
-        with:
-          args: develop
 
       - name: Clippy
         uses: actions-rs/cargo@v1
