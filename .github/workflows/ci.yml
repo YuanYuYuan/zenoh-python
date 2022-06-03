@@ -36,7 +36,9 @@ jobs:
           components: rustfmt, clippy
 
       - name: Build zenoh-python
-        run: python3 ./setup.py develop
+        uses: messense/maturin-action@v1
+        with:
+          args: develop
 
       - name: Clippy
         uses: actions-rs/cargo@v1
