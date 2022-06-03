@@ -1,9 +1,11 @@
-name: WIP
+name: Release
 
 on:
-  push:
-    branches:
-      - WIP
+  release:
+    types: [published]
+  schedule:
+    - cron: "0 1 * * 1-5"
+  workflow_dispatch:
 
 env:
   PYTHON_VERSION: "3.7"
