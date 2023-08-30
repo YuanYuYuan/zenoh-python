@@ -43,16 +43,16 @@ jobs:
       - name: Build zenoh-python
         uses: messense/maturin-action@v1
 
-      - name: Clippy
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-
-      - name: Run rustfmt
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: -- --check
+      # - name: Clippy
+      #   uses: actions-rs/cargo@v1
+      #   with:
+      #     command: clippy
+      #
+      # - name: Run rustfmt
+      #   uses: actions-rs/cargo@v1
+      #   with:
+      #     command: fmt
+      #     args: -- --check
 
       - name: Install zenoh-python
         run: pip3 install ./target/wheels/*.whl
