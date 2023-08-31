@@ -1,8 +1,9 @@
 import zenoh
 import json
-from zenoh import QueryTarget, Session, Query, Sample
+from zenoh import Session, Query, Sample
 from typing import List, Tuple
 import time
+import threading
 
 SLEEP = 1
 MSG_COUNT = 1_000;
@@ -34,8 +35,7 @@ def close_session(peer01: Session, peer02: Session):
     peer02.close()
 
 
-def run_session_qryrep(peer01: Session, peer02: Session):
-    keyexpr = "test/session"
+def run_session_qryrep(peer01: Session, peer02: Session, keyexpr: str):
 
     for size in MSG_SIZE:
         num_requests = 0
@@ -84,5 +84,11 @@ def run_session_qryrep(peer01: Session, peer02: Session):
 def test_session():
     zenoh.init_logger()
     (peer01, peer02) = open_session(["tcp/127.0.0.1:17447"])
-    run_session_qryrep(peer01, peer02)
+    t1 = threading.Thread(target=run_session_qryrep, args=(peer01, peer02, "test/session1", ))
+    t2 = threading.Thread(target=run_session_qryrep, args=(peer02, peer01, "test/session2", ))
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+    # run_session_qryrep(peer01, peer02, "test/session")
     close_session(peer01, peer02)
