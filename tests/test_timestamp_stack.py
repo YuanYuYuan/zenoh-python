@@ -116,7 +116,7 @@ def test_receive_only():
 
 
 def test_publisher_default():
-    """Publisher-level default instrumentation applies to all puts."""
+    """Publisher put with instrumentation records SEND and RECEIVE points."""
     instr = TimestampInstrumentation(send=True, receive=True)
     received: List[zenoh.Sample] = []
 
@@ -124,11 +124,9 @@ def test_publisher_default():
         with session.declare_subscriber(
             "test/ts/pub_default", lambda s: received.append(s)
         ):
-            with session.declare_publisher(
-                "test/ts/pub_default", timestamp_instrumentation=instr
-            ) as pub:
+            with session.declare_publisher("test/ts/pub_default") as pub:
                 time.sleep(0.05)
-                pub.put(b"data")
+                pub.put(b"data", timestamp_instrumentation=instr)
                 time.sleep(SLEEP)
 
     assert len(received) == 1
@@ -143,8 +141,7 @@ def test_publisher_default():
 
 
 def test_publisher_per_put_override():
-    """Per-put override takes precedence over publisher default."""
-    default_instr = TimestampInstrumentation(send=True, receive=True)
+    """Per-put instrumentation controls which points are recorded."""
     override_instr = TimestampInstrumentation(send=True, receive=False)
     received: List[zenoh.Sample] = []
 
@@ -152,9 +149,7 @@ def test_publisher_per_put_override():
         with session.declare_subscriber(
             "test/ts/pub_override", lambda s: received.append(s)
         ):
-            with session.declare_publisher(
-                "test/ts/pub_override", timestamp_instrumentation=default_instr
-            ) as pub:
+            with session.declare_publisher("test/ts/pub_override") as pub:
                 time.sleep(0.05)
                 pub.put(b"data", timestamp_instrumentation=override_instr)
                 time.sleep(SLEEP)
