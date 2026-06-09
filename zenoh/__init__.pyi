@@ -855,7 +855,6 @@ class Query:
         express: bool | None = None,
         attachment: _IntoZBytes | None = None,
         timestamp: Timestamp | None = None,
-        timestamp_instrumentation: TimestampInstrumentation | None = None,
     ):
         """Sends a :class:`Sample` of kind :attr:`SampleKind.PUT` as a reply to this query.
 
@@ -872,7 +871,6 @@ class Query:
         payload: _IntoZBytes,
         *,
         encoding: _IntoEncoding | None = None,
-        timestamp_instrumentation: TimestampInstrumentation | None = None,
     ):
         """Sends a :class:`ReplyError` as a reply to this query."""
 

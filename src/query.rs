@@ -30,7 +30,7 @@ use crate::{
     sample::SourceInfo,
     session::EntityGlobalId,
     time::Timestamp,
-    timestamp_stack::{TimestampInstrumentation, TimestampStack},
+    timestamp_stack::TimestampStack,
     utils::{generic, wait, IntoPyResult, IntoPython, IntoRust, MapInto},
 };
 
@@ -147,7 +147,7 @@ impl Query {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (key_expr, payload, *, encoding = None, congestion_control = None, priority = None, express = None, attachment = None, timestamp = None, timestamp_instrumentation = None))]
+    #[pyo3(signature = (key_expr, payload, *, encoding = None, congestion_control = None, priority = None, express = None, attachment = None, timestamp = None))]
     fn reply(
         &self,
         py: Python,
@@ -159,7 +159,6 @@ impl Query {
         express: Option<bool>,
         #[pyo3(from_py_with = ZBytes::from_py_opt)] attachment: Option<ZBytes>,
         timestamp: Option<Timestamp>,
-        timestamp_instrumentation: Option<TimestampInstrumentation>,
     ) -> PyResult<()> {
         if congestion_control.is_some() {
             import!(py, warnings.warn).call1((
@@ -173,31 +172,24 @@ impl Query {
                 py.get_type::<pyo3::exceptions::PyDeprecationWarning>(),
             ))?;
         }
-        let mut build = build!(
+        let build = build!(
             self.get_ref()?.reply(key_expr, payload),
             encoding,
             express,
             attachment,
             timestamp,
         );
-        if let Some(instr) = timestamp_instrumentation {
-            build = build.timestamp_instrumentation(Some(instr.0));
-        }
         wait(py, build)
     }
 
-    #[pyo3(signature = (payload, *, encoding = None, timestamp_instrumentation = None))]
+    #[pyo3(signature = (payload, *, encoding = None))]
     fn reply_err(
         &self,
         py: Python,
         #[pyo3(from_py_with = ZBytes::from_py)] payload: ZBytes,
         #[pyo3(from_py_with = Encoding::from_py_opt)] encoding: Option<Encoding>,
-        timestamp_instrumentation: Option<TimestampInstrumentation>,
     ) -> PyResult<()> {
-        let mut build = build!(self.get_ref()?.reply_err(payload), encoding);
-        if let Some(instr) = timestamp_instrumentation {
-            build = build.timestamp_instrumentation(Some(instr.0));
-        }
+        let build = build!(self.get_ref()?.reply_err(payload), encoding);
         wait(py, build)
     }
 
