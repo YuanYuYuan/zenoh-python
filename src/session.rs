@@ -243,7 +243,7 @@ impl Session {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (key_expr, *, encoding = None, congestion_control = None, priority = None, express = None, reliability = None, allowed_destination = None, timestamp_instrumentation = None))]
+    #[pyo3(signature = (key_expr, *, encoding = None, congestion_control = None, priority = None, express = None, reliability = None, allowed_destination = None))]
     fn declare_publisher(
         &self,
         py: Python,
@@ -254,9 +254,8 @@ impl Session {
         express: Option<bool>,
         reliability: Option<Reliability>,
         allowed_destination: Option<Locality>,
-        timestamp_instrumentation: Option<TimestampInstrumentation>,
     ) -> PyResult<Publisher> {
-        let mut builder = build!(
+        let builder = build!(
             self.0.declare_publisher(key_expr),
             encoding,
             congestion_control,
@@ -265,9 +264,6 @@ impl Session {
             reliability,
             allowed_destination,
         );
-        if let Some(instr) = timestamp_instrumentation {
-            builder = builder.timestamp_instrumentation(Some(instr.0));
-        }
         wait(py, builder).map_into()
     }
 

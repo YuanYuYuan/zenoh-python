@@ -1616,7 +1616,6 @@ class Session:
         express: bool | None = None,
         reliability: Reliability | None = None,
         allowed_destination: Locality | None = None,
-        timestamp_instrumentation: TimestampInstrumentation | None = None,
     ) -> Publisher:
         """Create a :class:`Publisher` for the given key expression."""
 
