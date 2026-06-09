@@ -50,7 +50,6 @@ impl From<RustInterceptionPoint> for InterceptionPoint {
             RustInterceptionPoint::Send => Self::Send,
             RustInterceptionPoint::Route => Self::Route,
             RustInterceptionPoint::Receive => Self::Receive,
-            _ => Self::Unknown,
         }
     }
 }
