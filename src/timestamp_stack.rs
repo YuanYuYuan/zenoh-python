@@ -15,8 +15,9 @@ use std::sync::Arc;
 
 use pyo3::{prelude::*, types::PyBytes};
 use zenoh::timestamp_stack::{
-    InterceptionPoint as RustInterceptionPoint, SessionTimestampCallback,
-    TimestampInstrumentation as RustTimestampInstrumentation, TsStackContext as RustTsStackContext,
+    InstrumentationTimestamp, InterceptionPoint as RustInterceptionPoint, SessionTimestampCallback,
+    TimestampInstrumentationBuilder as RustTimestampInstrumentationBuilder,
+    TsStackContext as RustTsStackContext,
 };
 
 use crate::{
@@ -97,7 +98,11 @@ impl TimestampInstrumentation {
     #[new]
     #[pyo3(signature = (*, send = false, route = false, receive = false))]
     fn new(send: bool, route: bool, receive: bool) -> PyResult<Self> {
-        RustTimestampInstrumentation::new(send, route, receive)
+        RustTimestampInstrumentationBuilder::new()
+            .set_send(send)
+            .set_route(route)
+            .set_receive(receive)
+            .build()
             .map(Self)
             .into_pyres()
     }
@@ -125,12 +130,18 @@ impl TimestampStackRecord {
         self.0.is_custom()
     }
 
-    fn timestamp<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
-        PyBytes::new(py, self.0.timestamp())
+    fn timestamp<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyBytes>> {
+        match self.0.timestamp() {
+            InstrumentationTimestamp::Custom(bytes) => Some(PyBytes::new(py, bytes)),
+            InstrumentationTimestamp::UHLC(_) => None,
+        }
     }
 
     fn as_timestamp(&self) -> Option<Timestamp> {
-        self.0.as_timestamp().map(Timestamp)
+        match self.0.timestamp() {
+            InstrumentationTimestamp::UHLC(ts) => Some(Timestamp(*ts)),
+            InstrumentationTimestamp::Custom(_) => None,
+        }
     }
 
     fn __repr__(&self) -> String {
