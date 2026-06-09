@@ -866,12 +866,7 @@ class Query:
            Response QoS now automatically matches the original query's QoS to avoid priority inversion.
         """
 
-    def reply_err(
-        self,
-        payload: _IntoZBytes,
-        *,
-        encoding: _IntoEncoding | None = None,
-    ):
+    def reply_err(self, payload: _IntoZBytes, *, encoding: _IntoEncoding | None = None):
         """Sends a :class:`ReplyError` as a reply to this query."""
 
     def reply_del(
