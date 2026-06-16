@@ -50,15 +50,13 @@ def example_put_subscribe(session):
 
 
 def example_publisher_default(session):
-    print("\n── publisher with default instrumentation ───────────────────────────")
+    print("\n── publisher with per-put instrumentation ───────────────────────────")
     instr = TimestampInstrumentation(send=True, receive=True)
     received = []
-    with session.declare_publisher(
-        "demo/ts/pub", timestamp_instrumentation=instr
-    ) as pub:
+    with session.declare_publisher("demo/ts/pub") as pub:
         with session.declare_subscriber("demo/ts/pub", lambda s: received.append(s)):
             time.sleep(0.05)
-            pub.put(b"message-1")
+            pub.put(b"message-1", timestamp_instrumentation=instr)
             pub.put(
                 b"message-2",
                 timestamp_instrumentation=TimestampInstrumentation(send=True),

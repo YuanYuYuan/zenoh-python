@@ -756,6 +756,7 @@ class Publisher:
         attachment: _IntoZBytes | None = None,
         timestamp: Timestamp | None = None,
         source_info: SourceInfo | None = None,
+        timestamp_instrumentation: TimestampInstrumentation | None = None,
     ):
         """Declare that data associated with this publisher's key expression is deleted.
 
@@ -896,6 +897,11 @@ class Query:
     def source_info(self) -> SourceInfo | None:
         """Gets info on the source of this Query."""
 
+    @_unstable
+    @property
+    def timestamp_stack(self) -> TimestampStack | None:
+        """Gets the timestamp stack of this Query, if timestamp instrumentation was active."""
+
     def drop(self):
         """Drop the instance of a query.
         The query will only be finalized when all query instances (one per queryable
@@ -991,6 +997,7 @@ class Querier:
         attachment: _IntoZBytes | None = None,
         source_info: SourceInfo | None = None,
         cancellation_token: CancellationToken | None = None,
+        timestamp_instrumentation: TimestampInstrumentation | None = None,
     ) -> Handler[Reply]:
         """Sends a query and returns a channel for processing replies.
 
@@ -1007,6 +1014,7 @@ class Querier:
         attachment: _IntoZBytes | None = None,
         source_info: SourceInfo | None = None,
         cancellation_token: CancellationToken | None = None,
+        timestamp_instrumentation: TimestampInstrumentation | None = None,
     ) -> _H:
         """Sends a query and returns a channel for processing replies.
 
@@ -1023,6 +1031,7 @@ class Querier:
         attachment: _IntoZBytes | None = None,
         source_info: SourceInfo | None = None,
         cancellation_token: CancellationToken | None = None,
+        timestamp_instrumentation: TimestampInstrumentation | None = None,
     ) -> None:
         """Sends a query and processes replies using the provided callback.
 
@@ -1194,6 +1203,11 @@ class Reply:
     def replier_id(self) -> EntityGlobalId | None:
         """Returns the ID of the zenoh instance that answered this reply."""
 
+    @_unstable
+    @property
+    def timestamp_stack(self) -> TimestampStack | None:
+        """Gets the timestamp stack of the inner Sample or ReplyError, if timestamp instrumentation was active."""
+
 @final
 class ReplyError:
     """An error reply received from a :class:`Queryable` and available in the :class:`Reply` structure."""
@@ -1205,6 +1219,11 @@ class ReplyError:
     @property
     def encoding(self) -> Encoding:
         """Gets the encoding of this `ReplyError`."""
+
+    @_unstable
+    @property
+    def timestamp_stack(self) -> TimestampStack | None:
+        """Gets the timestamp stack of this ReplyError, if timestamp instrumentation was active."""
 
 @final
 class SampleKind(Enum):
@@ -1266,6 +1285,11 @@ class Sample:
     @property
     def source_info(self) -> SourceInfo | None:
         """Gets info on the source of this Sample."""
+
+    @_unstable
+    @property
+    def timestamp_stack(self) -> TimestampStack | None:
+        """Gets the timestamp stack of this Sample, if timestamp instrumentation was active."""
 
 @final
 class Scout(Generic[_H]):
@@ -1459,6 +1483,7 @@ class Session:
         timestamp: Timestamp | None = None,
         allowed_destination: Locality | None = None,
         source_info: SourceInfo | None = None,
+        timestamp_instrumentation: TimestampInstrumentation | None = None,
     ):
         """Publish a delete sample directly from the session.
 
@@ -2132,6 +2157,142 @@ _IntoTimestampId = bytearray | bytes | TimestampId
 Used in :meth:`Timestamp.__new__` to accept various byte representations
 that can be converted to a :class:`TimestampId`.
 """
+
+@_unstable
+@final
+class InterceptionPoint(Enum):
+    """A point along a message's routing path where a timestamp is recorded."""
+
+    SEND = 0
+    ROUTE = 1
+    RECEIVE = 2
+    UNKNOWN = 255
+
+InterceptionPoint.SEND.__doc__ = """Timestamp recorded at the sending side (before transmission)."""
+InterceptionPoint.ROUTE.__doc__ = """Timestamp recorded at the routing layer."""
+InterceptionPoint.RECEIVE.__doc__ = """Timestamp recorded at the receiving side (on delivery)."""
+InterceptionPoint.UNKNOWN.__doc__ = """Catch-all for future variants added by the Rust core."""
+
+@_unstable
+@final
+class TsStackContext:
+    """Context passed to a :class:`SessionTimestampCallback` when a timestamp is requested.
+
+    Provides information about the session and the interception point where the timestamp is being collected.
+    """
+
+    @property
+    def zid(self) -> ZenohId:
+        """The ZenohId of the session that is generating the timestamp."""
+
+    @property
+    def whatami(self) -> WhatAmI:
+        """The mode (router/peer/client) of the session generating the timestamp."""
+
+    @property
+    def interception_point(self) -> InterceptionPoint:
+        """The routing stage at which this timestamp is being collected."""
+
+    def __repr__(self) -> str: ...
+
+SessionTimestampCallback = Callable[[TsStackContext], bytes]
+"""A callable that receives a :class:`TsStackContext` and returns raw timestamp bytes.
+
+Used with :func:`open` to provide custom per-session timestamps at each interception point.
+The returned bytes are stored verbatim in the :class:`TimestampStackRecord` and exposed via
+:meth:`TimestampStackRecord.timestamp`. Use :meth:`TimestampStackRecord.as_timestamp` to
+check whether the bytes decode as a UHLC :class:`Timestamp`.
+"""
+
+@_unstable
+@final
+class TimestampInstrumentationBuilder:
+    """Builder for :class:`TimestampInstrumentation`.
+
+    Construct one via :class:`TimestampInstrumentationBuilder()`, configure which interception
+    points to record, then call :meth:`build` to produce the final :class:`TimestampInstrumentation`.
+    """
+
+    def __new__(cls) -> Self: ...
+    def set_send(self, send: bool) -> Self:
+        """Enable or disable recording a timestamp at the SEND interception point."""
+
+    def set_route(self, route: bool) -> Self:
+        """Enable or disable recording a timestamp at the ROUTE interception point."""
+
+    def set_receive(self, receive: bool) -> Self:
+        """Enable or disable recording a timestamp at the RECEIVE interception point."""
+
+    def build(self) -> TimestampInstrumentation:
+        """Build the :class:`TimestampInstrumentation`. Raises :class:`ZError` if all flags are False."""
+
+    def __repr__(self) -> str: ...
+
+@_unstable
+@final
+class TimestampInstrumentation:
+    """Specifies which interception points should record timestamps for a message.
+
+    Create one directly (keyword-only constructor) or via :class:`TimestampInstrumentationBuilder`:
+
+    .. code-block:: python
+
+        instr = zenoh.TimestampInstrumentation(send=True, receive=True)
+        instr = zenoh.TimestampInstrumentationBuilder().set_send(True).set_receive(True).build()
+
+    Pass it to :meth:`Session.put`, :meth:`Session.delete`, :meth:`Publisher.put`,
+    :meth:`Publisher.delete`, :meth:`Session.get`, or :meth:`Querier.get`.
+    """
+
+    def __new__(cls, *, send: bool = False, route: bool = False, receive: bool = False) -> Self: ...
+    def is_instrumented(self, point: InterceptionPoint) -> bool:
+        """Returns True if the given interception point is enabled."""
+
+    def __repr__(self) -> str: ...
+
+@_unstable
+@final
+class TimestampStackRecord:
+    """A single timestamp entry in a :class:`TimestampStack`.
+
+    Each record carries the interception point, whether the timestamp was generated by a
+    custom :data:`SessionTimestampCallback`, and the raw or UHLC timestamp value.
+    """
+
+    @property
+    def point(self) -> InterceptionPoint:
+        """The interception point at which this record was captured."""
+
+    @property
+    def is_custom(self) -> bool:
+        """True if the timestamp was generated by a custom :data:`SessionTimestampCallback`."""
+
+    def timestamp(self) -> Timestamp | bytes:
+        """Returns the timestamp as a :class:`Timestamp` (UHLC) or raw :class:`bytes` (custom)."""
+
+    def as_timestamp(self) -> Timestamp | None:
+        """Returns the timestamp as a :class:`Timestamp`, or None if it is a custom bytes timestamp."""
+
+    def __repr__(self) -> str: ...
+
+@_unstable
+@final
+class TimestampStack:
+    """A stack of :class:`TimestampStackRecord` entries accumulated along a message's routing path.
+
+    Accessible via :attr:`Sample.timestamp_stack`, :attr:`ReplyError.timestamp_stack`,
+    :attr:`Query.timestamp_stack`, and :attr:`Reply.timestamp_stack`.
+    """
+
+    @property
+    def instrumentation(self) -> TimestampInstrumentation:
+        """The instrumentation configuration that was active when this stack was created."""
+
+    @property
+    def records(self) -> list[TimestampStackRecord]:
+        """The list of timestamp records collected along the message's path."""
+
+    def __repr__(self) -> str: ...
 
 @final
 class WhatAmI(Enum):

@@ -17,7 +17,7 @@ from typing import List, Optional
 import pytest
 
 import zenoh
-from zenoh import InterceptionPoint, TimestampInstrumentation, TimestampStack
+from zenoh import InterceptionPoint, TimestampInstrumentation, TimestampStack, SampleKind
 
 SLEEP = 0.2
 
@@ -232,3 +232,114 @@ def test_invalid_instrumentation():
     """All-false instrumentation should raise (at least one point required)."""
     with pytest.raises(Exception):
         TimestampInstrumentation(send=False, route=False, receive=False)
+
+
+# ── test_session_delete_instrumentation ──────────────────────────────────────
+
+
+def test_session_delete_instrumentation():
+    """session.delete with instrumentation produces a stack on the DELETE sample."""
+    instr = TimestampInstrumentation(send=True, receive=True)
+    received: List[zenoh.Sample] = []
+
+    with zenoh.open(peer_config()) as session:
+        with session.declare_subscriber("test/ts/del", lambda s: received.append(s)):
+            time.sleep(0.05)
+            session.delete("test/ts/del", timestamp_instrumentation=instr)
+            time.sleep(SLEEP)
+
+    assert len(received) == 1
+    assert received[0].kind == SampleKind.DELETE
+    stack = received[0].timestamp_stack
+    assert stack is not None
+    points = [r.point for r in stack.records]
+    assert InterceptionPoint.SEND in points
+    assert InterceptionPoint.RECEIVE in points
+
+
+# ── test_publisher_delete_instrumentation ────────────────────────────────────
+
+
+def test_publisher_delete_instrumentation():
+    """publisher.delete with instrumentation produces a stack on the DELETE sample."""
+    instr = TimestampInstrumentation(send=True, receive=True)
+    received: List[zenoh.Sample] = []
+
+    with zenoh.open(peer_config()) as session:
+        with session.declare_subscriber(
+            "test/ts/pub_del", lambda s: received.append(s)
+        ):
+            with session.declare_publisher("test/ts/pub_del") as pub:
+                time.sleep(0.05)
+                pub.delete(timestamp_instrumentation=instr)
+                time.sleep(SLEEP)
+
+    assert len(received) == 1
+    assert received[0].kind == SampleKind.DELETE
+    stack = received[0].timestamp_stack
+    assert stack is not None
+    points = [r.point for r in stack.records]
+    assert InterceptionPoint.SEND in points
+    assert InterceptionPoint.RECEIVE in points
+
+
+# ── test_query_timestamp_stack ────────────────────────────────────────────────
+
+
+def test_query_timestamp_stack():
+    """Query.timestamp_stack carries the instrumentation from the get caller."""
+    instr = TimestampInstrumentation(send=True, receive=True)
+    query_stacks: List[Optional[TimestampStack]] = []
+
+    with zenoh.open(peer_config()) as session:
+
+        def on_query(q):
+            query_stacks.append(q.timestamp_stack)
+            q.reply(q.key_expr, b"answer")
+
+        with session.declare_queryable("test/ts/q/**", on_query):
+            time.sleep(0.05)
+            replies = list(
+                session.get(
+                    "test/ts/q/key",
+                    timestamp_instrumentation=instr,
+                )
+            )
+            time.sleep(SLEEP)
+
+    assert len(query_stacks) == 1
+    stack = query_stacks[0]
+    assert stack is not None
+    points = [r.point for r in stack.records]
+    assert InterceptionPoint.SEND in points
+
+    assert len(replies) >= 1
+
+
+# ── test_querier_get_instrumentation ─────────────────────────────────────────
+
+
+def test_querier_get_instrumentation():
+    """Querier.get with instrumentation produces a stack visible at the queryable."""
+    instr = TimestampInstrumentation(send=True, receive=True)
+    query_stacks: List[Optional[TimestampStack]] = []
+
+    with zenoh.open(peer_config()) as session:
+
+        def on_query(q):
+            query_stacks.append(q.timestamp_stack)
+            q.reply(q.key_expr, b"querier-answer")
+
+        with session.declare_queryable("test/ts/qr/**", on_query):
+            with session.declare_querier("test/ts/qr/key") as querier:
+                time.sleep(0.05)
+                replies = list(querier.get(timestamp_instrumentation=instr))
+                time.sleep(SLEEP)
+
+    assert len(query_stacks) == 1
+    stack = query_stacks[0]
+    assert stack is not None
+    points = [r.point for r in stack.records]
+    assert InterceptionPoint.SEND in points
+
+    assert len(replies) >= 1
