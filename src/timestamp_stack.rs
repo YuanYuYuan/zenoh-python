@@ -27,6 +27,59 @@ use crate::{
     utils::IntoPyResult,
 };
 
+// ── TimestampInstrumentationBuilder ──────────────────────────────────────────
+
+#[pyclass]
+pub(crate) struct TimestampInstrumentationBuilder {
+    send: bool,
+    route: bool,
+    receive: bool,
+}
+
+#[pymethods]
+impl TimestampInstrumentationBuilder {
+    #[new]
+    fn new() -> Self {
+        Self {
+            send: false,
+            route: false,
+            receive: false,
+        }
+    }
+
+    fn set_send(mut self_: PyRefMut<Self>, send: bool) -> PyRefMut<Self> {
+        self_.send = send;
+        self_
+    }
+
+    fn set_route(mut self_: PyRefMut<Self>, route: bool) -> PyRefMut<Self> {
+        self_.route = route;
+        self_
+    }
+
+    fn set_receive(mut self_: PyRefMut<Self>, receive: bool) -> PyRefMut<Self> {
+        self_.receive = receive;
+        self_
+    }
+
+    fn build(&self) -> PyResult<TimestampInstrumentation> {
+        RustTimestampInstrumentationBuilder::new()
+            .set_send(self.send)
+            .set_route(self.route)
+            .set_receive(self.receive)
+            .build()
+            .map(TimestampInstrumentation)
+            .into_pyres()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "TimestampInstrumentationBuilder(send={}, route={}, receive={})",
+            self.send, self.route, self.receive
+        )
+    }
+}
+
 // InterceptionPoint is #[non_exhaustive] so we can't use enum_mapper! (it generates exhaustive
 // From impls). Define it manually with a repr u8 for Python comparison, and a fallback variant.
 #[pyo3::pyclass(eq)]
@@ -129,10 +182,14 @@ impl TimestampStackRecord {
         self.0.is_custom()
     }
 
-    fn timestamp<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyBytes>> {
+    fn timestamp(&self, py: Python) -> PyResult<PyObject> {
         match self.0.timestamp() {
-            InstrumentationTimestamp::Custom(bytes) => Some(PyBytes::new(py, bytes)),
-            InstrumentationTimestamp::UHLC(_) => None,
+            InstrumentationTimestamp::UHLC(ts) => {
+                Ok(Timestamp(*ts).into_pyobject(py)?.into_any().unbind())
+            }
+            InstrumentationTimestamp::Custom(bytes) => {
+                Ok(PyBytes::new(py, bytes).into_any().unbind())
+            }
         }
     }
 
@@ -183,7 +240,12 @@ pub(crate) fn py_to_session_ts_callback(py_cb: PyObject) -> SessionTimestampCall
             match py_cb.call1(py, (py_ctx,)) {
                 Ok(result) => result.extract::<Vec<u8>>(py).unwrap_or_default(),
                 Err(e) => {
-                    e.print(py);
+                    if let Ok(logging) = py.import("logging") {
+                        if let Ok(logger) = logging.call_method1("getLogger", ("zenoh",)) {
+                            let _ = logger
+                                .call_method1("error", (format!("Timestamp callback error: {e}"),));
+                        }
+                    }
                     Vec::new()
                 }
             }

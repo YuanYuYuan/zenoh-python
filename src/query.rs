@@ -30,7 +30,7 @@ use crate::{
     sample::SourceInfo,
     session::EntityGlobalId,
     time::Timestamp,
-    timestamp_stack::TimestampStack,
+    timestamp_stack::{TimestampInstrumentation, TimestampStack},
     utils::{generic, wait, IntoPyResult, IntoPython, IntoRust, MapInto},
 };
 
@@ -231,6 +231,11 @@ impl Query {
         Ok(self.get_ref()?.source_info().cloned().map_into())
     }
 
+    #[getter]
+    fn timestamp_stack(&self) -> PyResult<Option<TimestampStack>> {
+        Ok(self.get_ref()?.timestamp_stack().cloned().map(TimestampStack))
+    }
+
     fn drop(&mut self) {
         Python::with_gil(|gil| gil.allow_threads(|| drop(self.0.take())));
     }
@@ -422,7 +427,7 @@ impl Querier {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (handler = None, *, parameters = None, payload = None, encoding = None, attachment = None, source_info = None, cancellation_token = None))]
+    #[pyo3(signature = (handler = None, *, parameters = None, payload = None, encoding = None, attachment = None, source_info = None, cancellation_token = None, timestamp_instrumentation = None))]
     fn get(
         &self,
         py: Python,
@@ -433,10 +438,11 @@ impl Querier {
         #[pyo3(from_py_with = ZBytes::from_py_opt)] attachment: Option<ZBytes>,
         source_info: Option<SourceInfo>,
         cancellation_token: Option<CancellationToken>,
+        timestamp_instrumentation: Option<TimestampInstrumentation>,
     ) -> PyResult<HandlerImpl<Reply>> {
         let this = self.get_ref()?;
         let (handler, _) = into_handler(py, handler, cancellation_token.as_ref())?;
-        let builder = build!(
+        let mut builder = build!(
             this.get(),
             parameters,
             payload,
@@ -445,6 +451,9 @@ impl Querier {
             source_info,
             cancellation_token
         );
+        if let Some(instr) = timestamp_instrumentation {
+            builder = builder.timestamp_instrumentation(Some(instr.0));
+        }
         wait(py, builder.with(handler)).map_into()
     }
 

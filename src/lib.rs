@@ -79,8 +79,8 @@ pub(crate) mod zenoh {
         },
         time::{Timestamp, TimestampId, NTP64},
         timestamp_stack::{
-            InterceptionPoint, TimestampInstrumentation, TimestampStack, TimestampStackRecord,
-            TsStackContext,
+            InterceptionPoint, TimestampInstrumentation, TimestampInstrumentationBuilder,
+            TimestampStack, TimestampStackRecord, TsStackContext,
         },
         ZError,
     };

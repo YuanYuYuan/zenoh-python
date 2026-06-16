@@ -129,7 +129,7 @@ impl Session {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (key_expr, *, congestion_control = None, priority = None, express = None, attachment = None, timestamp = None, allowed_destination = None, source_info = None))]
+    #[pyo3(signature = (key_expr, *, congestion_control = None, priority = None, express = None, attachment = None, timestamp = None, allowed_destination = None, source_info = None, timestamp_instrumentation = None))]
     fn delete(
         &self,
         py: Python,
@@ -141,8 +141,9 @@ impl Session {
         timestamp: Option<Timestamp>,
         allowed_destination: Option<Locality>,
         source_info: Option<SourceInfo>,
+        timestamp_instrumentation: Option<TimestampInstrumentation>,
     ) -> PyResult<()> {
-        let build = build!(
+        let mut build = build!(
             self.0.delete(key_expr),
             congestion_control,
             priority,
@@ -152,6 +153,9 @@ impl Session {
             allowed_destination,
             source_info
         );
+        if let Some(instr) = timestamp_instrumentation {
+            build = build.timestamp_instrumentation(Some(instr.0));
+        }
         wait(py, build)
     }
 

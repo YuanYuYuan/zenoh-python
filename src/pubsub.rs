@@ -111,15 +111,19 @@ impl Publisher {
         wait(py, builder)
     }
 
-    #[pyo3(signature = (*, attachment = None, timestamp = None, source_info = None))]
+    #[pyo3(signature = (*, attachment = None, timestamp = None, source_info = None, timestamp_instrumentation = None))]
     fn delete(
         &self,
         py: Python,
         #[pyo3(from_py_with = ZBytes::from_py_opt)] attachment: Option<ZBytes>,
         timestamp: Option<Timestamp>,
         source_info: Option<SourceInfo>,
+        timestamp_instrumentation: Option<TimestampInstrumentation>,
     ) -> PyResult<()> {
-        let builder = build!(self.get_ref()?.delete(), attachment, timestamp, source_info);
+        let mut builder = build!(self.get_ref()?.delete(), attachment, timestamp, source_info);
+        if let Some(instr) = timestamp_instrumentation {
+            builder = builder.timestamp_instrumentation(Some(instr.0));
+        }
         wait(py, builder)
     }
 
