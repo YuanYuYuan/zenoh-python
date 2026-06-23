@@ -119,10 +119,20 @@ impl From<InterceptionPoint> for RustInterceptionPoint {
     }
 }
 
-wrapper!(zenoh::timestamp_stack::TsStackContext: Clone);
+// Renamed from TsStackContext (OlivierHecart review: make the callback context name
+// less implementation-specific, drop the "Stack" coupling).
+#[pyclass]
+#[derive(Clone)]
+pub(crate) struct TimestampContext(pub(crate) RustTsStackContext);
+
+impl From<RustTsStackContext> for TimestampContext {
+    fn from(value: RustTsStackContext) -> Self {
+        Self(value)
+    }
+}
 
 #[pymethods]
-impl TsStackContext {
+impl TimestampContext {
     #[getter]
     fn zid(&self) -> ZenohId {
         self.0.zid.into()
@@ -233,7 +243,7 @@ impl TimestampStack {
 pub(crate) fn py_to_session_ts_callback(py_cb: PyObject) -> SessionTimestampCallback {
     Arc::new(move |ctx: RustTsStackContext| {
         Python::with_gil(|py| {
-            let py_ctx = match Py::new(py, TsStackContext(ctx)) {
+            let py_ctx = match Py::new(py, TimestampContext(ctx)) {
                 Ok(obj) => obj,
                 Err(_) => return Vec::new(),
             };

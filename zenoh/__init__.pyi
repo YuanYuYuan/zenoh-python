@@ -2175,7 +2175,7 @@ InterceptionPoint.UNKNOWN.__doc__ = """Catch-all for future variants added by th
 
 @_unstable
 @final
-class TsStackContext:
+class TimestampContext:
     """Context passed to a :class:`SessionTimestampCallback` when a timestamp is requested.
 
     Provides information about the session and the interception point where the timestamp is being collected.
@@ -2195,8 +2195,8 @@ class TsStackContext:
 
     def __repr__(self) -> str: ...
 
-SessionTimestampCallback = Callable[[TsStackContext], bytes]
-"""A callable that receives a :class:`TsStackContext` and returns raw timestamp bytes.
+SessionTimestampCallback = Callable[[TimestampContext], bytes]
+"""A callable that receives a :class:`TimestampContext` and returns raw timestamp bytes.
 
 Used with :func:`open` to provide custom per-session timestamps at each interception point.
 The returned bytes are stored verbatim in the :class:`TimestampStackRecord` and exposed via
