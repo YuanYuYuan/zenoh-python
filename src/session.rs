@@ -33,6 +33,7 @@ use crate::{
     query::{Querier, QueryConsolidation, QueryTarget, Queryable, Reply, ReplyKeyExpr, Selector},
     sample::{Locality, SampleKind, SourceInfo},
     time::Timestamp,
+    timestamp_stack::{py_to_session_ts_callback, TimestampInstrumentation},
     utils::{duration, wait, IntoPython, MapInto},
 };
 
@@ -94,7 +95,7 @@ impl Session {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (key_expr, payload, *, encoding = None, congestion_control = None, priority = None, express = None, attachment = None, timestamp = None, allowed_destination = None, source_info = None))]
+    #[pyo3(signature = (key_expr, payload, *, encoding = None, congestion_control = None, priority = None, express = None, attachment = None, timestamp = None, allowed_destination = None, source_info = None, timestamp_instrumentation = None))]
     fn put(
         &self,
         py: Python,
@@ -108,8 +109,9 @@ impl Session {
         timestamp: Option<Timestamp>,
         allowed_destination: Option<Locality>,
         source_info: Option<SourceInfo>,
+        timestamp_instrumentation: Option<TimestampInstrumentation>,
     ) -> PyResult<()> {
-        let build = build!(
+        let mut build = build!(
             self.0.put(key_expr, payload),
             encoding,
             congestion_control,
@@ -120,11 +122,14 @@ impl Session {
             allowed_destination,
             source_info,
         );
+        if let Some(instr) = timestamp_instrumentation {
+            build = build.timestamp_instrumentation(Some(instr.0));
+        }
         wait(py, build)
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (key_expr, *, congestion_control = None, priority = None, express = None, attachment = None, timestamp = None, allowed_destination = None, source_info = None))]
+    #[pyo3(signature = (key_expr, *, congestion_control = None, priority = None, express = None, attachment = None, timestamp = None, allowed_destination = None, source_info = None, timestamp_instrumentation = None))]
     fn delete(
         &self,
         py: Python,
@@ -136,8 +141,9 @@ impl Session {
         timestamp: Option<Timestamp>,
         allowed_destination: Option<Locality>,
         source_info: Option<SourceInfo>,
+        timestamp_instrumentation: Option<TimestampInstrumentation>,
     ) -> PyResult<()> {
-        let build = build!(
+        let mut build = build!(
             self.0.delete(key_expr),
             congestion_control,
             priority,
@@ -147,11 +153,14 @@ impl Session {
             allowed_destination,
             source_info
         );
+        if let Some(instr) = timestamp_instrumentation {
+            build = build.timestamp_instrumentation(Some(instr.0));
+        }
         wait(py, build)
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (selector, handler = None, *, target = None, consolidation = None, accept_replies = None, timeout = None, congestion_control = None, priority = None, express = None, payload = None, encoding = None, attachment = None, allowed_destination = None, source_info = None, cancellation_token = None))]
+    #[pyo3(signature = (selector, handler = None, *, target = None, consolidation = None, accept_replies = None, timeout = None, congestion_control = None, priority = None, express = None, payload = None, encoding = None, attachment = None, allowed_destination = None, source_info = None, cancellation_token = None, timestamp_instrumentation = None))]
     fn get(
         &self,
         py: Python,
@@ -172,9 +181,10 @@ impl Session {
         allowed_destination: Option<Locality>,
         source_info: Option<SourceInfo>,
         cancellation_token: Option<CancellationToken>,
+        timestamp_instrumentation: Option<TimestampInstrumentation>,
     ) -> PyResult<HandlerImpl<Reply>> {
         let (handler, _) = into_handler(py, handler, cancellation_token.as_ref())?;
-        let builder = build!(
+        let mut builder = build!(
             self.0.get(selector),
             target,
             consolidation,
@@ -190,7 +200,9 @@ impl Session {
             source_info,
             cancellation_token
         );
-
+        if let Some(instr) = timestamp_instrumentation {
+            builder = builder.timestamp_instrumentation(Some(instr.0));
+        }
         wait(py, builder.with(handler)).map_into()
     }
 
@@ -306,8 +318,17 @@ impl Drop for Session {
 }
 
 #[pyfunction]
-pub(crate) fn open(py: Python, config: Config) -> PyResult<Session> {
-    wait(py, zenoh::open(config)).map(Session)
+#[pyo3(signature = (config, *, timestamp_callback = None))]
+pub(crate) fn open(
+    py: Python,
+    config: Config,
+    timestamp_callback: Option<PyObject>,
+) -> PyResult<Session> {
+    let mut builder = zenoh::open(config);
+    if let Some(cb) = timestamp_callback {
+        builder = builder.with_timestamp_callback(py_to_session_ts_callback(cb));
+    }
+    wait(py, builder).map(Session)
 }
 
 wrapper!(zenoh::session::SessionInfo);
